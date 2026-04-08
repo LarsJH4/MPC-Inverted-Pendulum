@@ -1,7 +1,7 @@
 %% Code for MPC project
 clear; clc; close all;
-addpath(genpath('C:\Users\larsh\MATLAB\tbxmanager'))
-addpath(genpath('C:\Users\larsh\Documents\MATLAB\YALMIP-master'))
+addpath(genpath('C:\...')) %Path to tbxmanager
+addpath(genpath('C:\...')) %Path to Yalmip
 rng(1);
 
 %% RunMode
