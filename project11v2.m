@@ -720,16 +720,9 @@ function Xf = compute_terminal_invariant_set(A,B,Q,R,cfg,varargin)
 
     nx = size(A,1);
 
-    % -------------------------------------------------------------
-    % 1) LQR terminal controller
-    % -------------------------------------------------------------
     [K,~,~] = dlqr(A,B,Q,R);
     Acl = A - B*K;
 
-    % -------------------------------------------------------------
-    % 2) Initial admissible set X0 = {e | H0 e <= h0}
-    %    Same terminal bounds as in your current code
-    % -------------------------------------------------------------
     eFmax = [cfg.xf_max_cart;
              cfg.xf_max_cartdot;
              cfg.xf_max_theta_err;
@@ -742,18 +735,14 @@ function Xf = compute_terminal_invariant_set(A,B,Q,R,cfg,varargin)
            eFmax];
 
     % Input bounds under u = -K e
-    % |u| <= umax  ->  -umax <= -K e <= umax
     HuK = [-K;
             K];
     hu  = [cfg.u_max;
            cfg.u_max];
 
-    % Base constraint set X0
     H0 = [Hx; HuK];
     h0 = [hx; hu];
 
-    % Current accumulated constraint description:
-    %   Hcur e <= hcur
     Hcur = H0;
     hcur = h0;
 
@@ -761,11 +750,6 @@ function Xf = compute_terminal_invariant_set(A,B,Q,R,cfg,varargin)
     opts = optimoptions('linprog', ...
         'Algorithm','dual-simplex', ...
         'Display','none');
-
-    % -------------------------------------------------------------
-    % 3) Tutorial-style iteration:
-    %    append H0*Acl^t e <= h0 until all are redundant
-    % -------------------------------------------------------------
     if verbose
         fprintf('Computing terminal invariant set (tutorial style)...\n');
     end
@@ -828,10 +812,7 @@ function Xf = compute_terminal_invariant_set(A,B,Q,R,cfg,varargin)
     if t == maxIter && ~allRedundant && verbose
         warning('Maximum number of iterations reached before convergence.');
     end
-
-    % -------------------------------------------------------------
-    % 4) Return result
-    % -------------------------------------------------------------
+    
     if useMPT && exist('Polyhedron','class') == 8
         Xf = Polyhedron('A',Hcur,'b',hcur);
         Xf.minHRep();
@@ -1326,6 +1307,7 @@ function y = pwm_reference(t, Aref, Tref, duty, xoffset)
 end
 
 %% Functions for animation
+%Made using generative AI, only used to validate the model, not used for report
 function animate_pendulum_inverted(thist, Xhist, l, varargin)
     p = inputParser;
     addParameter(p, 'PlaybackSpeed', 1.0);
