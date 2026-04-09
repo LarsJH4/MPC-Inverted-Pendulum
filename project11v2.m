@@ -1077,9 +1077,6 @@ function sliceData = compute_closed_loop_viability_slice_reg_adaptive(cfg, M, m,
 end
 
 function plot_closed_loop_viability_slice_adaptive(sliceData, figName, varargin)
-% Plot adaptive viability slice returned by
-% compute_closed_loop_viability_slice_reg_adaptive
-
     p = inputParser;
     addParameter(p, 'ShowCellEdges', true);
     addParameter(p, 'ShowMixedCells', false);
@@ -1307,7 +1304,7 @@ function y = pwm_reference(t, Aref, Tref, duty, xoffset)
 end
 
 %% Functions for animation
-%Made using generative AI, only used to validate the model, not used for report
+%Disclaimer: animations functions are made using generative AI and only used to validate the model, not used for report
 function animate_pendulum_inverted(thist, Xhist, l, varargin)
     p = inputParser;
     addParameter(p, 'PlaybackSpeed', 1.0);
