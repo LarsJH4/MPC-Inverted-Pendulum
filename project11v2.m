@@ -1,18 +1,21 @@
 %% Code for MPC project
+% Dependencies: needs YALMIP and MPT3 on MATLAB path 
 clear; clc; close all;
-addpath(genpath('C:\...')) %Path to tbxmanager
+addpath(genpath('C:\...')) %Path to tbxmanager containing MPT3
 addpath(genpath('C:\...')) %Path to Yalmip
 rng(1);
 
+
 %% RunMode
-runMode = 'set1'; % 'set1', 'set2', 'set12', 'lqr', 'set1lqr', 'set4', 'set5', 'set124', 'set1245'
-distnoise = false; % if true adds disturbance/noise
+runMode = 'set1'; % pick from 'set1', 'set2', 'set12', 'lqr', 'set1lqr', 'set4', 'set5', 'set124', 'set1245'
+distnoise = false; % if true adds disturbance/noise (does not work with lqr)
 computeROA = false; % if true computes and plots viability slice
-xfprojplot = false; % if true plots Xf
-doAnimation = false; % if true shows animation
+xfprojplot = false; % if true plots projections of Xf
+doAnimation = false; % if true shows animation of first or first two carts
 
 
 %% Parameters
+% Parameters as taken from model
 M = 1.0;
 m = 0.5;
 l = 0.5;
@@ -20,7 +23,9 @@ I = m*l^2/12;
 b = 0.1;
 g = 9.81;
 
+
 %% Configurations
+% Set 1
 cfg(1).name = 'Set 1';
 cfg(1).Ts   = 0.05;
 cfg(1).Aref = 0.25;
@@ -175,6 +180,7 @@ cfg(5).d_true   = 0.25;
 cfg(5).sigma_v  = [1e-3; 2.5e-3; 1e-3; 2.5e-3];
 cfg(5).obsPoles = [0.50 0.55 0.60 0.65 0.97];
 
+
 %% RunMode selector
 switch lower(runMode)
     case 'set1'
@@ -199,6 +205,7 @@ switch lower(runMode)
         error('runMode unknown.');
 end
 
+
 %% Running the cases
 results = cell(numel(idxRun),1);
 for ii = 1:numel(idxRun)
@@ -213,6 +220,7 @@ for ii = 1:numel(idxRun)
     end
 end
 
+
 %% Plot disturbance estimate
 if distnoise
     figure; hold on; grid on;
@@ -226,6 +234,7 @@ if distnoise
     title('Constant disturbance estimate');
     legend('Location','best');
 end
+
 
 %% Overview Plots
 figure('Name', 'Plots', 'Color', 'w');
@@ -262,6 +271,7 @@ end
 % yline(-cfg(3).u_max, 'k--', 'LineWidth', 1, 'HandleVisibility', 'off');
 legend('Location','best');
 grid on; ylabel('Force [N]'); xlabel('Time [s]');
+
 
 %% Plot X_f projections
 if xfprojplot
@@ -313,9 +323,9 @@ if doAnimation
     end
 end
 
+
 %% Functions
 function res = run_case_distnoise(cfg, M, m, l, I, b, g)
-
     x_eq = [0; 0; pi; 0];
     u_eq = 0;
 
@@ -324,10 +334,8 @@ function res = run_case_distnoise(cfg, M, m, l, I, b, g)
 
     nx = size(A,1);
     nu = size(B,2);
-
     C  = eye(nx);
     p  = nx;
-    
     nd = 1;
     Bd = B;
     Cd = zeros(p, nd);
@@ -352,11 +360,7 @@ function res = run_case_distnoise(cfg, M, m, l, I, b, g)
 
     Tref = 1/cfg.fref;
     xref_fun    = @(t) pwm_reference(t, cfg.Aref, Tref, cfg.duty, cfg.xref_offset);
-
-    xref_full = @(t) [xref_fun(t);
-                      0;
-                      pi;
-                      0];
+    xref_full = @(t) [xref_fun(t); 0; pi; 0];
 
     Q   = cfg.Q;
     R   = cfg.R;
@@ -372,16 +376,8 @@ function res = run_case_distnoise(cfg, M, m, l, I, b, g)
 
     Xf = compute_terminal_invariant_set(A, B, Q, R, cfg);
 
-    xmin = [-cfg.x_max_cart;
-            -cfg.x_max_cartdot;
-             pi - cfg.x_max_theta_err;
-            -cfg.x_max_thetadot];
-
-    xmax = [ cfg.x_max_cart;
-              cfg.x_max_cartdot;
-              pi + cfg.x_max_theta_err;
-              cfg.x_max_thetadot];
-
+    xmin = [-cfg.x_max_cart; -cfg.x_max_cartdot; pi - cfg.x_max_theta_err; -cfg.x_max_thetadot];
+    xmax = [ cfg.x_max_cart; cfg.x_max_cartdot; pi + cfg.x_max_theta_err; cfg.x_max_thetadot];
     umin = -cfg.u_max;
     umax =  cfg.u_max;
 
@@ -435,27 +431,24 @@ function res = run_case_distnoise(cfg, M, m, l, I, b, g)
     zhat = [y; 0];
     u_prev = 0;
 
-    Xhist    = zeros(nx, nsim+1);
+    Xhist = zeros(nx, nsim+1);
     XhatHist = zeros(nx, nsim+1);
-    Uhist    = zeros(nu, nsim);
+    Uhist = zeros(nu, nsim);
     Xrefhist = zeros(nx, nsim+1);
     DhatHist = zeros(1, nsim+1);
 
-    Xhist(:,1)    = x;
+    Xhist(:,1) = x;
     XhatHist(:,1) = zhat(1:nx);
     Xrefhist(:,1) = xref_full(0);
-    DhatHist(1)   = zhat(end);
+    DhatHist(1) = zhat(end);
 
     for k = 1:nsim
         tnow = thist(k);
-
         zhat = Aaug*zhat + Baug*u_prev + caug + L*(y - Caug*zhat);
         xhat = zhat(1:nx);
         dhat = zhat(end);
-
         xhat(3) = wrap_to_pi_branch(xhat(3), pi);
         zhat(3) = xhat(3);
-
         Xrnum = zeros(nx*(N+1),1);
         Urefnum = zeros(nu*N,1);
 
@@ -477,7 +470,6 @@ function res = run_case_distnoise(cfg, M, m, l, I, b, g)
         end
 
         Uhist(:,k) = u;
-
         u_plant = u + cfg.d_true;
         [~, xsol] = ode45(@(t,xx) pendulum_nonlinear_inverted(xx, u_plant, M, m, l, I, b, g), ...
                           [0 cfg.Ts], x);
@@ -486,31 +478,30 @@ function res = run_case_distnoise(cfg, M, m, l, I, b, g)
 
         y = x + cfg.sigma_v .* randn(nx,1);
 
-        Xhist(:,k+1)    = x;
+        Xhist(:,k+1) = x;
         XhatHist(:,k+1) = xhat;
         Xrefhist(:,k+1) = xref_full(thist(k+1));
-        DhatHist(k+1)   = dhat;
+        DhatHist(k+1) = dhat;
 
         u_prev = u;
     end
 
-    res.name     = cfg.name;
-    res.cfg      = cfg;
-    res.thist    = thist;
-    res.Xhist    = Xhist;
+    res.name = cfg.name;
+    res.cfg = cfg;
+    res.thist = thist;
+    res.Xhist = Xhist;
     res.XhatHist = XhatHist;
     res.Xrefhist = Xrefhist;
-    res.Uhist    = Uhist;
+    res.Uhist = Uhist;
     res.DhatHist = DhatHist;
-    res.Xf       = Xf;
+    res.Xf = Xf;
 end
 
 function res = run_case_reg(cfg, M, m, l, I, b, g)
-
     % Upright equilibrium
     x_eq = [0; 0; pi; 0];
     u_eq = 0;
-
+    
     % Linearize and discretize
     [A_c, B_c, c_c] = linearize_dynamics_affine(x_eq, u_eq, M, m, l, I, b, g);
     [A, B, c] = discretize_affine(A_c, B_c, c_c, cfg.Ts);
@@ -528,14 +519,10 @@ function res = run_case_reg(cfg, M, m, l, I, b, g)
 
     % Reference
     Tref = 1/cfg.fref;
-    xref_fun    = @(t) pwm_reference(t, cfg.Aref, Tref, cfg.duty, cfg.xref_offset);
+    xref_fun = @(t) pwm_reference(t, cfg.Aref, Tref, cfg.duty, cfg.xref_offset);
+    r_fun = @(t) [xref_fun(t); 0; pi; 0];
 
-    r_fun = @(t) [xref_fun(t);
-                  0;
-                  pi;
-                  0];
-
-    % MPC data
+    % Cost Matrices
     Q = cfg.Q;
     R = cfg.R;
     N = cfg.N;
@@ -546,39 +533,30 @@ function res = run_case_reg(cfg, M, m, l, I, b, g)
             fprintf('Lowest eigenvalue of P is %s, and P is symmetric, thus P is positive definite \n', min(eig(P)))
         end
     end
+    
     % Terminal invariant set in error coordinates
     Xf = compute_terminal_invariant_set(A, B, Q, R, cfg);
     
     % State / input constraints
-    xmin = [-cfg.x_max_cart;
-            -cfg.x_max_cartdot;
-             pi - cfg.x_max_theta_err;
-            -cfg.x_max_thetadot];
-
-    xmax = [ cfg.x_max_cart;
-              cfg.x_max_cartdot;
-              pi + cfg.x_max_theta_err;
-              cfg.x_max_thetadot];
-
+    xmin = [-cfg.x_max_cart; -cfg.x_max_cartdot; pi - cfg.x_max_theta_err; -cfg.x_max_thetadot];
+    xmax = [cfg.x_max_cart; cfg.x_max_cartdot; pi + cfg.x_max_theta_err; cfg.x_max_thetadot];
     umin = -cfg.u_max;
     umax =  cfg.u_max;
 
     % Build optimizer
-    x0   = sdpvar(nx,1);
+    x0 = sdpvar(nx,1);
     Rvec = sdpvar(nx*(N+1),1);
-    X    = sdpvar(nx,N+1);
-    U    = sdpvar(nu,N);
+    X = sdpvar(nx,N+1);
+    U = sdpvar(nu,N);
 
     constraints = [X(:,1) == x0];
     objective   = 0;
 
     for k = 1:N
         rk = Rvec((k-1)*nx+1:k*nx);
-
         constraints = [constraints, X(:,k+1) == A*X(:,k) + B*U(:,k) + c];
         constraints = [constraints, xmin <= X(:,k) <= xmax];
         constraints = [constraints, umin <= U(:,k) <= umax];
-
         ek = X(:,k) - rk;
         objective = objective + ek'*Q*ek + U(:,k)'*R*U(:,k);
     end
@@ -593,24 +571,21 @@ function res = run_case_reg(cfg, M, m, l, I, b, g)
 
     opts = sdpsettings('solver','quadprog','verbose',0);
     controller = optimizer(constraints, objective, opts, {x0, Rvec}, U(:,1));
-
     
     % Simulation
-    nsim  = round(cfg.Tsim/cfg.Ts);
+    nsim = round(cfg.Tsim/cfg.Ts);
     thist = (0:nsim)*cfg.Ts;
 
     x = cfg.x0;
-    Xhist    = zeros(nx,nsim+1);
-    Uhist    = zeros(nu,nsim);
+    Xhist = zeros(nx,nsim+1);
+    Uhist = zeros(nu,nsim);
     Xrefhist = zeros(nx,nsim+1);
 
-    Xhist(:,1)    = x;
+    Xhist(:,1) = x;
     Xrefhist(:,1) = r_fun(0);
 
     for k = 1:nsim
         tnow = thist(k);
-
-        % Build reference sequence for this MPC step
         Rnum = zeros(nx*(N+1),1);
         for j = 0:N
             tj = tnow + j*cfg.Ts;
@@ -620,7 +595,6 @@ function res = run_case_reg(cfg, M, m, l, I, b, g)
 
         % Solve MPC
         u = controller{{x, Rnum}};
-
         Uhist(:,k) = u;
 
         % Nonlinear plant propagation
@@ -632,21 +606,20 @@ function res = run_case_reg(cfg, M, m, l, I, b, g)
             error('%s: nonlinear simulation produced NaN/Inf at step %d.', cfg.name, k);
         end
 
-        Xhist(:,k+1)    = x;
+        Xhist(:,k+1) = x;
         Xrefhist(:,k+1) = r_fun(thist(k+1));
     end
 
-    res.name     = cfg.name;
-    res.cfg      = cfg;
-    res.thist    = thist;
-    res.Xhist    = Xhist;
-    res.Uhist    = Uhist;
+    res.name = cfg.name;
+    res.cfg = cfg;
+    res.thist = thist;
+    res.Xhist = Xhist;
+    res.Uhist = Uhist;
     res.Xrefhist = Xrefhist;
-    res.Xf       = Xf;
+    res.Xf = Xf;
 end
 
 function res = run_lqr(cfg, M, m, l, I, b, g)
-
     x_eq = [0; 0; pi; 0];
     u_eq = 0;
 
@@ -697,11 +670,11 @@ function res = run_lqr(cfg, M, m, l, I, b, g)
 
     Xrefhist(:,nsim+1) = r_fun(thist(nsim+1));
 
-    res.name     = cfg.name;
-    res.cfg      = cfg;
-    res.thist    = thist;
-    res.Xhist    = Xhist_lqr;
-    res.Uhist    = Uhist_lqr;
+    res.name = cfg.name;
+    res.cfg = cfg;
+    res.thist = thist;
+    res.Xhist = Xhist_lqr;
+    res.Uhist = Uhist_lqr;
     res.Xrefhist = Xrefhist;
 end
 
@@ -710,12 +683,12 @@ function Xf = compute_terminal_invariant_set(A,B,Q,R,cfg,varargin)
     addParameter(p,'MaxIter',200);
     addParameter(p,'Tol',1e-8);
     addParameter(p,'UseMPT',true);
-    addParameter(p,'Verbose',true);
+    addParameter(p,'Verbose',false);
     parse(p,varargin{:});
 
     maxIter = p.Results.MaxIter;
-    tol     = p.Results.Tol;
-    useMPT  = p.Results.UseMPT;
+    tol = p.Results.Tol;
+    useMPT = p.Results.UseMPT;
     verbose = p.Results.Verbose;
 
     nx = size(A,1);
@@ -723,26 +696,17 @@ function Xf = compute_terminal_invariant_set(A,B,Q,R,cfg,varargin)
     [K,~,~] = dlqr(A,B,Q,R);
     Acl = A - B*K;
 
-    eFmax = [cfg.xf_max_cart;
-             cfg.xf_max_cartdot;
-             cfg.xf_max_theta_err;
-             cfg.xf_max_thetadot];
+    eFmax = [cfg.xf_max_cart; cfg.xf_max_cartdot; cfg.xf_max_theta_err; cfg.xf_max_thetadot];
 
     % State bounds in error coordinates
-    Hx = [ eye(nx);
-          -eye(nx)];
-    hx = [ eFmax;
-           eFmax];
+    Hx = [ eye(nx); -eye(nx)];
+    hx = [ eFmax; eFmax];
 
     % Input bounds under u = -K e
-    HuK = [-K;
-            K];
-    hu  = [cfg.u_max;
-           cfg.u_max];
-
+    HuK = [-K; K];
+    hu  = [cfg.u_max; cfg.u_max];
     H0 = [Hx; HuK];
     h0 = [hx; hu];
-
     Hcur = H0;
     hcur = h0;
 
@@ -751,7 +715,7 @@ function Xf = compute_terminal_invariant_set(A,B,Q,R,cfg,varargin)
         'Algorithm','dual-simplex', ...
         'Display','none');
     if verbose
-        fprintf('Computing terminal invariant set (tutorial style)...\n');
+        fprintf('Computing terminal invariant set.\n');
     end
 
     for t = 1:maxIter
@@ -763,22 +727,13 @@ function Xf = compute_terminal_invariant_set(A,B,Q,R,cfg,varargin)
 
         for i = 1:size(Hnew,1)
             f = Hnew(i,:);
-
-            % Solve:
-            %   max f e
-            %   s.t. Hcur e <= hcur
-            %
-            % linprog solves min c'*e, so maximize via min -f*e
             [~,fval,exitflag] = linprog(-f(:), Hcur, hcur, [], [], [], [], opts);
-
             if exitflag ~= 1
                 error('linprog failed during redundancy check at iteration %d, row %d.', t, i);
             end
-
             maxVal = -fval;
 
-            % If current set allows a value larger than hnew(i),
-            % then this inequality is NOT redundant and must be added
+            % Add inequality if new
             if maxVal > hnew(i) + tol
                 allRedundant = false;
                 rowsToAdd(i) = true;
@@ -800,7 +755,7 @@ function Xf = compute_terminal_invariant_set(A,B,Q,R,cfg,varargin)
         Hcur = [Hcur; Hnew(rowsToAdd,:)];
         hcur = [hcur; hnew(rowsToAdd)];
 
-        % Optional cleanup using MPT if available
+        %  Use MPT to make polyhedron
         if useMPT && exist('Polyhedron','class') == 8
             Ptmp = Polyhedron('A',Hcur,'b',hcur);
             Ptmp.minHRep();
@@ -822,10 +777,10 @@ function Xf = compute_terminal_invariant_set(A,B,Q,R,cfg,varargin)
         end
 
         % store extra info if you want easy access
-        Xf.Data.K    = K;
-        Xf.Data.Acl  = Acl;
-        Xf.Data.H0   = H0;
-        Xf.Data.h0   = h0;
+        Xf.Data.K = K;
+        Xf.Data.Acl = Acl;
+        Xf.Data.H0 = H0;
+        Xf.Data.h0 = h0;
         Xf.Data.nIter = min(t,maxIter);
     else
         Xf = struct();
@@ -841,13 +796,13 @@ end
    
 function sliceData = compute_closed_loop_viability_slice_reg_adaptive(cfg, M, m, l, I, b, g, nStepsCheck, varargin)
     if nargin < 8 || isempty(nStepsCheck)
-        nStepsCheck = 40;
+        nStepsCheck = 50;
     end
 
     p = inputParser;
-    addParameter(p, 'MaxDepth', 6);            % max quadtree depth
-    addParameter(p, 'MinCellWidth',  0.01);    % [m]
-    addParameter(p, 'MinCellHeight', deg2rad(0.25)); % [rad]
+    addParameter(p, 'MaxDepth', 6);
+    addParameter(p, 'MinCellWidth',  0.01);    % x_p dimension
+    addParameter(p, 'MinCellHeight', deg2rad(0.25)); % \theta dimension
     addParameter(p, 'UseCenterTest', true);
     addParameter(p, 'Verbose', true);
     parse(p, varargin{:});
@@ -857,7 +812,6 @@ function sliceData = compute_closed_loop_viability_slice_reg_adaptive(cfg, M, m,
     %MPC
     x_eq = [0; 0; pi; 0];
     u_eq = 0;
-
     [A_c, B_c, c_c] = linearize_dynamics_affine(x_eq, u_eq, M, m, l, I, b, g);
     [A, B, c] = discretize_affine(A_c, B_c, c_c, cfg.Ts);
 
@@ -867,11 +821,7 @@ function sliceData = compute_closed_loop_viability_slice_reg_adaptive(cfg, M, m,
 
     Tref = 1/cfg.fref;
     xref_fun    = @(t) pwm_reference(t, cfg.Aref, Tref, cfg.duty, cfg.xref_offset);
-
-    r_fun = @(t) [xref_fun(t);
-                  0;
-                  pi;
-                  0];
+    r_fun = @(t) [xref_fun(t); 0; pi; 0];
 
     Q = cfg.Q;
     R = cfg.R;
@@ -880,35 +830,23 @@ function sliceData = compute_closed_loop_viability_slice_reg_adaptive(cfg, M, m,
     %Xf in error coordinates
     Xf = compute_terminal_invariant_set(A, B, Q, R, cfg);
 
-    xmin = [-cfg.x_max_cart;
-            -cfg.x_max_cartdot;
-             pi - cfg.x_max_theta_err;
-            -cfg.x_max_thetadot];
-
-    xmax = [ cfg.x_max_cart;
-              cfg.x_max_cartdot;
-              pi + cfg.x_max_theta_err;
-              cfg.x_max_thetadot];
-
+    xmin = [-cfg.x_max_cart; -cfg.x_max_cartdot; pi - cfg.x_max_theta_err; -cfg.x_max_thetadot];
+    xmax = [cfg.x_max_cart; cfg.x_max_cartdot; pi + cfg.x_max_theta_err; cfg.x_max_thetadot];
     umin = -cfg.u_max;
     umax =  cfg.u_max;
 
     x0par = sdpvar(nx,1);
     Rvec  = sdpvar(nx*(N+1),1);
-
     X = sdpvar(nx,N+1);
     U = sdpvar(nu,N);
-
     constraints = [X(:,1) == x0par];
     objective   = 0;
 
     for k = 1:N
         rk = Rvec((k-1)*nx+1:k*nx);
-
         constraints = [constraints, X(:,k+1) == A*X(:,k) + B*U(:,k) + c];
         constraints = [constraints, xmin <= X(:,k) <= xmax];
         constraints = [constraints, umin <= U(:,k) <= umax];
-
         ek = X(:,k) - rk;
         objective = objective + ek'*Q*ek + U(:,k)'*R*U(:,k);
     end
@@ -924,10 +862,10 @@ function sliceData = compute_closed_loop_viability_slice_reg_adaptive(cfg, M, m,
     controller = optimizer(constraints, objective, yopts, {x0par, Rvec}, U(:,1));
 
     cache = containers.Map('KeyType','char','ValueType','any');
-    xMin   = -cfg.x_max_cart;
-    xMax   =  cfg.x_max_cart;
-    thMin  = -cfg.x_max_theta_err;
-    thMax  =  cfg.x_max_theta_err;
+    xMin = -cfg.x_max_cart;
+    xMax =  cfg.x_max_cart;
+    thMin = -cfg.x_max_theta_err;
+    thMax =  cfg.x_max_theta_err;
 
     if optsAdaptive.Verbose
         fprintf('Starting adaptive viability slice refinement...\n');
@@ -935,29 +873,19 @@ function sliceData = compute_closed_loop_viability_slice_reg_adaptive(cfg, M, m,
 
     cells = refine_cell(xMin, xMax, thMin, thMax, 0);
 
-    sliceData.cells         = cells;
-    sliceData.cfg           = cfg;
-    sliceData.nStepsCheck   = nStepsCheck;
-    sliceData.Xf            = Xf;
-    sliceData.domain        = [xMin, xMax, thMin, thMax];
-    sliceData.MaxDepth      = optsAdaptive.MaxDepth;
-    sliceData.MinCellWidth  = optsAdaptive.MinCellWidth;
+    sliceData.cells = cells;
+    sliceData.cfg = cfg;
+    sliceData.nStepsCheck = nStepsCheck;
+    sliceData.Xf = Xf;
+    sliceData.domain = [xMin, xMax, thMin, thMax];
+    sliceData.MaxDepth = optsAdaptive.MaxDepth;
+    sliceData.MinCellWidth = optsAdaptive.MinCellWidth;
     sliceData.MinCellHeight = optsAdaptive.MinCellHeight;
-    sliceData.cacheCount    = cache.Count;
-
-    if optsAdaptive.Verbose
-        fprintf('Adaptive refinement complete. Final number of leaf cells: %d\n', numel(cells));
-        fprintf('Unique point evaluations stored in cache: %d\n', cache.Count);
-    end
+    sliceData.cacheCount = cache.Count;
 
     %Function to refine one cell
     function leafCells = refine_cell(xL, xR, thL, thR, depth)
-
-        pts = [xL, thL;
-               xR, thL;
-               xL, thR;
-               xR, thR];
-
+        pts = [xL, thL; xR, thL; xL, thR; xR, thR];
         if optsAdaptive.UseCenterTest
             pts = [pts;
                    0.5*(xL+xR), 0.5*(thL+thR)];
@@ -986,7 +914,7 @@ function sliceData = compute_closed_loop_viability_slice_reg_adaptive(cfg, M, m,
             return;
         end
 
-        xM  = 0.5*(xL + xR);
+        xM = 0.5*(xL + xR);
         thM = 0.5*(thL + thR);
 
         c1 = refine_cell(xL, xM, thL, thM, depth+1);
@@ -1008,17 +936,12 @@ function sliceData = compute_closed_loop_viability_slice_reg_adaptive(cfg, M, m,
             return;
         end
 
-        x = [x0val;
-             0;
-             pi + thErrVal;
-             0];
-
+        x = [x0val; 0; pi + thErrVal; 0];
         ok = true;
         failCode = 0;
 
         for kk = 1:nStepsCheck
             tnow = (kk-1)*cfg.Ts;
-
             Rnum = zeros(nx*(N+1),1);
             for pp = 0:N
                 tp = tnow + pp*cfg.Ts;
@@ -1098,9 +1021,9 @@ function plot_closed_loop_viability_slice_adaptive(sliceData, figName, varargin)
         yPoly = rad2deg([C.thL, C.thL, C.thR, C.thR]);
 
         if C.label
-            faceCol = [0.2 0.7 0.2];   % green
+            faceCol = [0.2 0.7 0.2]; % green
         else
-            faceCol = [0.9 0.1 0.1];   % red
+            faceCol = [0.9 0.1 0.1]; % red
         end
 
         if showCellEdges
@@ -1223,27 +1146,21 @@ function plot_terminal_set_projection_in_axes(ax, Xf, cfg, idx, plotTitle)
 end
 
 function [xr, ur] = steady_target_selector(A, B, c, Bd, dhat, xref)
+    % Function for OTS
     nx = size(A,1);
     nu = size(B,2);
-
-    Mss = [eye(nx)-A, -B;
-           eye(nx),    zeros(nx,nu)];
-
-    rhs = [Bd*dhat + c;
-           xref];
-
+    Mss = [eye(nx)-A, -B; eye(nx), zeros(nx,nu)];
+    rhs = [Bd*dhat + c; xref];
     sol = pinv(Mss) * rhs;
     xr = sol(1:nx);
     ur = sol(nx+1:end);
-
     xr(3) = wrap_to_pi_branch(xr(3), pi);
 end
 
 function dx = pendulum_nonlinear_inverted(x,u,M,m,l,I,b,g)
-    xdot     = x(2);
-    theta    = x(3);
+    xdot = x(2);
+    theta = x(3);
     thetadot = x(4);
-
     D = (M+m)*(I+m*l^2) - m^2*l^2*cos(theta)^2;
     xddot = ((I+m*l^2)*(u - b*xdot + m*l*thetadot^2*sin(theta)) + m^2*g*l^2*sin(theta)*cos(theta)) / D;
     thetaddot = (-(M+m)*m*g*l*sin(theta) - m*l*cos(theta)*(u - b*xdot + m*l*thetadot^2*sin(theta))) / D;
@@ -1253,12 +1170,9 @@ end
 function [A, B, c] = linearize_dynamics_affine(xeq, ueq, M, m, l, I, b, g)
     nx = length(xeq);
     nu = 1;
-
     f0 = pendulum_nonlinear_inverted(xeq, ueq, M, m, l, I, b, g);
-
     epsx = 1e-6;
     epsu = 1e-6;
-
     A = zeros(nx,nx);
     for i = 1:nx
         dx = zeros(nx,1);
@@ -1283,11 +1197,10 @@ function [Ad, Bd, cd] = discretize_affine(A, B, c, Ts)
     Aaug = [A, c; zeros(1,nx), 0];
     Baug = [B; zeros(1,nu)];
     sysc_aug = ss(Aaug, Baug, eye(nx+1), zeros(nx+1,nu));
-    sysd_aug = c2d(sysc_aug, Ts, 'zoh'); %zoh explicitly enforced
+    sysd_aug = c2d(sysc_aug, Ts, 'zoh'); % Use zoh since to mimic effect of ADC/DAC's
 
     Ad_aug = sysd_aug.A;
     Bd_aug = sysd_aug.B;
-
     Ad = Ad_aug(1:nx, 1:nx);
     Bd = Bd_aug(1:nx, :);
     cd = Ad_aug(1:nx, nx+1);
